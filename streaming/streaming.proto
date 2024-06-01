@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package streaming;
+
+option go_package = "./streaming/grpc";
+
+service Chat {
+  // Биде·ре·кциональный стриминг (двусторонний поток)
+  rpc ChatStream(stream Message) returns (stream Message);
+}
+
+message Message {
+  string body = 1;
+}
