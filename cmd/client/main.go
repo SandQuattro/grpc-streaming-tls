@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"github.com/brianvoe/gofakeit/v7"
+	"google.golang.org/grpc/credentials/insecure"
 	"io"
 	"log"
 	"os"
@@ -14,7 +15,7 @@ import (
 )
 
 func main() {
-	conn, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
+	conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
@@ -30,7 +31,7 @@ func main() {
 
 	waitc := make(chan os.Signal, 1)
 
-	// Горутин для получения сообщений
+	// Горутина получения сообщений
 	go func() {
 		for {
 			in, err := stream.Recv()
@@ -49,22 +50,24 @@ func main() {
 	go func() {
 		for {
 			msg := gofakeit.Name() + " sending message " + gofakeit.BeerName()
-
 			if err = stream.Send(&pb.Message{Body: msg}); err != nil {
 				log.Fatalf("Failed to send a message: %v", err)
 			}
-
 			time.Sleep(time.Second)
 		}
 	}()
 
-	signal.Notify(waitc, os.Interrupt, os.Kill)
+	signal.Notify(waitc, os.Interrupt)
 
 	<-waitc
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second*5)
 	go func() {
-		stream.CloseSend()
+		err = stream.CloseSend()
+		if err != nil {
+			log.Fatalf("Failed to close stream: %v", err)
+			return
+		}
 		cancelFunc()
 	}()
 
