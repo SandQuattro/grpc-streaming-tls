@@ -28,7 +28,7 @@ func (s *server) ChatStream(stream pb.Chat_ChatStreamServer) error {
 		log.Printf("Received message body from client: %s", msg.Body)
 
 		// Отправляем сообщение обратно клиенту
-		if err := stream.Send(&pb.Message{Body: "Server received: " + msg.Body}); err != nil {
+		if err := stream.Send(&pb.Message{Body: msg.Body}); err != nil {
 			return err
 		}
 	}
