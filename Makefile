@@ -1,4 +1,7 @@
-.PHONY: protoc cert client server server-tls client client-tls
+.PHONY: lint protoc cert client server server-tls client client-tls
+
+lint:
+	golangci-lint run
 
 protoc:
 	protoc --go_out=. --go-grpc_out=. streaming/streaming.proto

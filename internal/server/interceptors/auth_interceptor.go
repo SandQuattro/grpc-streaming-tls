@@ -29,7 +29,7 @@ func (interceptor *AuthServerInterceptor) Unary() grpc.UnaryServerInterceptor {
 
 		err := interceptor.authorize(ctx)
 		if err != nil {
-			slog.Error("Unauthorized: ", err)
+			slog.With("error", err).Error("Unauthorized")
 			return nil, err
 		}
 

@@ -2,20 +2,18 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"flag"
-	"fmt"
 	"github.com/brianvoe/gofakeit/v7"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"grpc-streaming/internal/client/interceptors"
+	creds "grpc-streaming/internal/client/tls"
 	"io"
 	"log/slog"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"google.golang.org/grpc"
@@ -42,9 +40,9 @@ func main() {
 	}
 
 	if *enableTLS {
-		tlsCredentials, err := loadTLSCredentials()
+		tlsCredentials, err := creds.LoadClientTLSCredentials()
 		if err != nil {
-			logger.Error("cannot load TLS credentials: ", err)
+			logger.With("error", err).Error("cannot load client TLS credentials")
 			os.Exit(1)
 		}
 
@@ -53,7 +51,7 @@ func main() {
 
 	conn, err := grpc.NewClient(*address, clientOptions...)
 	if err != nil {
-		logger.Error("did not connect: %v", err)
+		logger.With("error", err).Error("[ERROR] grpc client did not connect")
 		return
 	}
 	defer conn.Close()
@@ -62,7 +60,7 @@ func main() {
 
 	stream, err := client.ChatStream(parentCtx)
 	if err != nil {
-		logger.With(slog.String("error", err.Error())).Error("Error creating stream")
+		logger.With(slog.String("error", err.Error())).Error("[ERROR] creating stream failed")
 		return
 	}
 
@@ -115,7 +113,7 @@ func main() {
 
 	// graceful shutdown
 	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, os.Kill)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
 		<-stop
@@ -131,24 +129,4 @@ func main() {
 
 	<-parentCtx.Done()
 	logger.Warn("Bye!")
-}
-
-func loadTLSCredentials() (credentials.TransportCredentials, error) {
-	// Load certificate of the CA who signed server's certificate
-	pemServerCA, err := os.ReadFile("cert/ca-cert.pem")
-	if err != nil {
-		return nil, err
-	}
-
-	certPool := x509.NewCertPool()
-	if !certPool.AppendCertsFromPEM(pemServerCA) {
-		return nil, fmt.Errorf("failed to add server CA's certificate")
-	}
-
-	// Create the credentials and return it
-	config := &tls.Config{
-		RootCAs: certPool,
-	}
-
-	return credentials.NewTLS(config), nil
 }
