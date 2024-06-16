@@ -46,9 +46,10 @@ func main() {
 
 	port := flag.Int("port", 0, "the server port")
 	enableTLS := flag.Bool("tls", false, "enable SSL/TLS")
+	mutualTLS := flag.Bool("mutualTLS", false, "enable client certificate verification")
 
 	flag.Parse()
-	logger.With("port", *port, "TLS", *enableTLS).Info("started server")
+	logger.With("port", *port, "TLS", *enableTLS, "mutualTLS", *mutualTLS).Info("started server")
 
 	interceptor := interceptors.NewAuthServerInterceptor([]string{"user"})
 	serverOptions := []grpc.ServerOption{
@@ -57,7 +58,7 @@ func main() {
 	}
 
 	if *enableTLS {
-		tlsCredentials, err := creds.LoadServerTLSCredentials()
+		tlsCredentials, err := creds.LoadServerTLSCredentials(*mutualTLS)
 		if err != nil {
 			logger.With("error", err).Error("cannot load TLS credentials")
 			os.Exit(1)

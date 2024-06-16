@@ -26,9 +26,10 @@ func main() {
 
 	address := flag.String("address", "", "the server address")
 	enableTLS := flag.Bool("tls", false, "enable SSL/TLS")
+	mutualTLS := flag.Bool("mutualTLS", false, "enable mutual TLS")
 
 	flag.Parse()
-	logger.With("address", *address, "TLS", *enableTLS).Info("connecting to server...")
+	logger.With("address", *address, "TLS", *enableTLS, "mutualTLS", *mutualTLS).Info("connecting to server...")
 
 	parentCtx, cancel := context.WithCancel(context.Background())
 
@@ -40,7 +41,7 @@ func main() {
 	}
 
 	if *enableTLS {
-		tlsCredentials, err := creds.LoadClientTLSCredentials()
+		tlsCredentials, err := creds.LoadClientTLSCredentials(*mutualTLS)
 		if err != nil {
 			logger.With("error", err).Error("cannot load client TLS credentials")
 			os.Exit(1)

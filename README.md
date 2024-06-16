@@ -9,5 +9,7 @@
 - added client / server tls communication
 - added logger / auth client / server interceptors
 
+## 1.0.2
+- added mutual tls, client now has its own certificate and server has to validate it
+
 ### future plains
-- Implement mutual TLS. At the moment, the server has already shared its certificate with the client. For mutual TLS, the client also has to share its certificate with the server. So we will update cert/gen.sh script to create and sign a certificate for the client.
