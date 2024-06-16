@@ -2,12 +2,18 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"flag"
+	"fmt"
 	"github.com/brianvoe/gofakeit/v7"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"grpc-streaming/internal/client/interceptors"
 	"io"
-	slog "log/slog"
+	"log/slog"
 	"os"
 	"os/signal"
 	"time"
@@ -17,13 +23,35 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	slog.SetDefault(logger)
+
+	address := flag.String("address", "", "the server address")
+	enableTLS := flag.Bool("tls", false, "enable SSL/TLS")
+
+	flag.Parse()
+	logger.With("address", *address, "TLS", *enableTLS).Info("connecting to server...")
+
 	parentCtx, cancel := context.WithCancel(context.Background())
 
-	h := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
+	interceptor := interceptors.NewAuthClientInterceptor()
+	clientOptions := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(interceptor.Unary()),
+		grpc.WithStreamInterceptor(interceptor.Stream()),
+	}
 
-	logger := slog.New(h)
+	if *enableTLS {
+		tlsCredentials, err := loadTLSCredentials()
+		if err != nil {
+			logger.Error("cannot load TLS credentials: ", err)
+			os.Exit(1)
+		}
 
-	conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
+		clientOptions = append(clientOptions, grpc.WithTransportCredentials(tlsCredentials))
+	}
+
+	conn, err := grpc.NewClient(*address, clientOptions...)
 	if err != nil {
 		logger.Error("did not connect: %v", err)
 		return
@@ -103,4 +131,24 @@ func main() {
 
 	<-parentCtx.Done()
 	logger.Warn("Bye!")
+}
+
+func loadTLSCredentials() (credentials.TransportCredentials, error) {
+	// Load certificate of the CA who signed server's certificate
+	pemServerCA, err := os.ReadFile("cert/ca-cert.pem")
+	if err != nil {
+		return nil, err
+	}
+
+	certPool := x509.NewCertPool()
+	if !certPool.AppendCertsFromPEM(pemServerCA) {
+		return nil, fmt.Errorf("failed to add server CA's certificate")
+	}
+
+	// Create the credentials and return it
+	config := &tls.Config{
+		RootCAs: certPool,
+	}
+
+	return credentials.NewTLS(config), nil
 }

@@ -1,9 +1,15 @@
 package main
 
 import (
+	"crypto/tls"
+	"flag"
+	"google.golang.org/grpc/credentials"
+	"grpc-streaming/internal/server/interceptors"
 	"io"
-	"log"
+	"log/slog"
 	"net"
+	"os"
+	"strconv"
 
 	"google.golang.org/grpc"
 	pb "grpc-streaming/streaming/grpc"
@@ -17,15 +23,16 @@ func (s *server) ChatStream(stream pb.Chat_ChatStreamServer) error {
 	for {
 		msg, err := stream.Recv()
 		if err == io.EOF {
-			log.Printf("client finished")
+			slog.Warn("client finished")
 			// Если клиент завершил отправку
 			return nil
 		}
 		if err != nil {
+			slog.Error("client finished with error: %v", err)
 			return err
 		}
 
-		log.Printf("Received message body from client: %s", msg.Body)
+		slog.With("body", msg.Body).Info("Received message body from client")
 
 		// Отправляем сообщение обратно клиенту
 		if err := stream.Send(&pb.Message{Body: msg.Body}); err != nil {
@@ -35,15 +42,58 @@ func (s *server) ChatStream(stream pb.Chat_ChatStreamServer) error {
 }
 
 func main() {
-	lis, err := net.Listen("tcp", ":50051")
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	slog.SetDefault(logger)
+
+	port := flag.Int("port", 0, "the server port")
+	enableTLS := flag.Bool("tls", false, "enable SSL/TLS")
+
+	flag.Parse()
+	logger.With("port", *port, "TLS", *enableTLS).Info("started server")
+
+	interceptor := interceptors.NewAuthServerInterceptor([]string{"user"})
+	serverOptions := []grpc.ServerOption{
+		grpc.UnaryInterceptor(interceptor.Unary()),
+		grpc.StreamInterceptor(interceptor.Stream()),
 	}
 
-	s := grpc.NewServer()
-	pb.RegisterChatServer(s, &server{})
-	log.Printf("Server is listening on port :50051")
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+	if *enableTLS {
+		tlsCredentials, err := loadTLSCredentials()
+		if err != nil {
+			logger.Error("cannot load TLS credentials: ", err)
+			os.Exit(1)
+		}
+
+		serverOptions = append(serverOptions, grpc.Creds(tlsCredentials))
 	}
+
+	grpcServer := grpc.NewServer(serverOptions...)
+
+	lis, err := net.Listen("tcp", ":"+strconv.Itoa(*port))
+	if err != nil {
+		logger.Error("failed to listen: %v", err)
+		os.Exit(1)
+	}
+
+	pb.RegisterChatServer(grpcServer, &server{})
+	if err = grpcServer.Serve(lis); err != nil {
+		logger.Error("failed to serve: %v", err)
+		os.Exit(1)
+	}
+}
+
+func loadTLSCredentials() (credentials.TransportCredentials, error) {
+	// Load server's certificate and private key
+	serverCert, err := tls.LoadX509KeyPair("cert/server-cert.pem", "cert/server-key.pem")
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the credentials and return it
+	config := &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth:   tls.NoClientCert,
+	}
+
+	return credentials.NewTLS(config), nil
 }
