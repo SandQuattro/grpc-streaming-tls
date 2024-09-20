@@ -25,6 +25,7 @@ func noClientCert() (credentials.TransportCredentials, error) {
 
 	// Create the credentials and return it
 	config := &tls.Config{
+		MinVersion:   tls.VersionTLS13,
 		Certificates: []tls.Certificate{serverCert},
 		ClientAuth:   tls.NoClientCert,
 	}
@@ -52,6 +53,7 @@ func mutualTLS() (credentials.TransportCredentials, error) {
 
 	// Create the credentials and return it
 	config := &tls.Config{
+		MinVersion:   tls.VersionTLS13,
 		Certificates: []tls.Certificate{serverCert},
 		ClientAuth:   tls.RequireAndVerifyClientCert, // Mutual TLS
 		ClientCAs:    certPool,
