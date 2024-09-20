@@ -13,3 +13,5 @@
 - added mutual tls, client now has its own certificate and server has to validate it
 
 ### future plains
+- [ ] add server calling rest service, 
+use json decoder in streaming mode to read json data and converts it to protobuf response 
