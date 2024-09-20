@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"grpc-streaming/internal/server/interceptors"
 	creds "grpc-streaming/internal/server/tls"
@@ -21,7 +22,7 @@ type server struct {
 func (s *server) ChatStream(stream pb.Chat_ChatStreamServer) error {
 	for {
 		msg, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			slog.Warn("client streaming finished")
 			// Если клиент завершил отправку
 			return nil
@@ -44,12 +45,15 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	slog.SetDefault(logger)
 
-	port := flag.Int("port", 0, "the server port")
-	enableTLS := flag.Bool("tls", false, "enable SSL/TLS")
-	mutualTLS := flag.Bool("mutualTLS", false, "enable client certificate verification")
+	var port int
+	var enableTLS, mutualTLS bool
 
+	flag.IntVar(&port, "port", 0, "the server port")
+	flag.BoolVar(&enableTLS, "tls", false, "enable SSL/TLS")
+	flag.BoolVar(&mutualTLS, "mutualTLS", false, "enable client certificate verification")
 	flag.Parse()
-	logger.With("port", *port, "TLS", *enableTLS, "mutualTLS", *mutualTLS).Info("started server")
+
+	logger.With("port", port, "TLS", enableTLS, "mutualTLS", mutualTLS).Info("started server")
 
 	interceptor := interceptors.NewAuthServerInterceptor([]string{"user"})
 	serverOptions := []grpc.ServerOption{
@@ -57,8 +61,8 @@ func main() {
 		grpc.StreamInterceptor(interceptor.Stream()),
 	}
 
-	if *enableTLS {
-		tlsCredentials, err := creds.LoadServerTLSCredentials(*mutualTLS)
+	if enableTLS {
+		tlsCredentials, err := creds.LoadServerTLSCredentials(mutualTLS)
 		if err != nil {
 			logger.With("error", err).Error("cannot load TLS credentials")
 			os.Exit(1)
@@ -69,7 +73,7 @@ func main() {
 
 	grpcServer := grpc.NewServer(serverOptions...)
 
-	lis, err := net.Listen("tcp", ":"+strconv.Itoa(*port))
+	lis, err := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if err != nil {
 		logger.With("error", err).Error("failed to listen tcp port")
 		os.Exit(1)

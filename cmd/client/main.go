@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"github.com/brianvoe/gofakeit/v7"
 	"google.golang.org/grpc/codes"
@@ -24,12 +25,15 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	slog.SetDefault(logger)
 
-	address := flag.String("address", "", "the server address")
-	enableTLS := flag.Bool("tls", false, "enable SSL/TLS")
-	mutualTLS := flag.Bool("mutualTLS", false, "enable mutual TLS")
+	var address string
+	var enableTLS, mutualTLS bool
 
+	flag.StringVar(&address, "address", "", "the server address")
+	flag.BoolVar(&enableTLS, "tls", false, "enable SSL/TLS")
+	flag.BoolVar(&mutualTLS, "mutualTLS", false, "enable mutual TLS")
 	flag.Parse()
-	logger.With("address", *address, "TLS", *enableTLS, "mutualTLS", *mutualTLS).Info("connecting to server...")
+
+	logger.With("address", address, "TLS", enableTLS, "mutualTLS", mutualTLS).Info("connecting to server...")
 
 	parentCtx, cancel := context.WithCancel(context.Background())
 
@@ -40,8 +44,8 @@ func main() {
 		grpc.WithStreamInterceptor(interceptor.Stream()),
 	}
 
-	if *enableTLS {
-		tlsCredentials, err := creds.LoadClientTLSCredentials(*mutualTLS)
+	if enableTLS {
+		tlsCredentials, err := creds.LoadClientTLSCredentials(mutualTLS)
 		if err != nil {
 			logger.With("error", err).Error("cannot load client TLS credentials")
 			os.Exit(1)
@@ -50,7 +54,7 @@ func main() {
 		clientOptions = append(clientOptions, grpc.WithTransportCredentials(tlsCredentials))
 	}
 
-	conn, err := grpc.NewClient(*address, clientOptions...)
+	conn, err := grpc.NewClient(address, clientOptions...)
 	if err != nil {
 		logger.With("error", err).Error("[ERROR] grpc client did not connect")
 		return
@@ -81,7 +85,7 @@ func main() {
 					continue
 				}
 
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					// Сервер прекратил отправку или контекст завершен
 					return
 				}
